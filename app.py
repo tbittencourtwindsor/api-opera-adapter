@@ -70,8 +70,7 @@ def retrieve_address():
         return jsonify({"Items": []})
     
     # --- Mapeamento (DE/PARA) ViaCEP -> Opera ---
-    # Esta é a parte mais CRÍTICA.
-    # Estamos traduzindo a resposta do ViaCEP para o formato do Opera.
+    # traduzindo a resposta do ViaCEP para o formato do Opera.
     
     opera_item = {
         "Id": address_id_cep,
@@ -109,8 +108,8 @@ def retrieve_address():
         "Barcode": "",
         "POBoxNumber": "",
         "Label": "",
-        "Type": "Residential", # Pode ser fixo
-        "DataLevel": "Premise", # Pode ser fixo
+        "Type": "Residential", 
+        "DataLevel": "Premise", 
         "Field1": "", "Field2": "", "Field3": "", "Field4": "", "Field5": "",
         "Field6": "", "Field7": "", "Field8": "", "Field9": "", "Field10": "",
         "Field11": "", "Field12": "", "Field13": "", "Field14": "", "Field15": "",
@@ -125,9 +124,6 @@ def retrieve_address():
     return jsonify(response_data)
 
 
-# 4. (Opcional) Linha para Teste Local
-# ------------------------------------
-# Isso permite rodar o servidor na sua própria máquina para testar
 if __name__ == '__main__':
-    # Roda o servidor na porta 5000 (ex: http://127.0.0.1:5000)
+ 
     app.run(debug=True, port=5000)
