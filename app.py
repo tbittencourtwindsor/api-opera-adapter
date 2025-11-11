@@ -90,7 +90,7 @@ def retrieve_address():
         "District": viacep_data.get('bairro', ''),      # DE: bairro (pode repetir)
         "City": viacep_data.get('localidade', ''),      # DE: localidade
         "Line1": viacep_data.get('logradouro', ''),     # DE: logradouro
-        "Line2": viacep_data.get('complemento', ''),   # DE: complemento
+        "Line2": "",  # DE: complemento
         "Line3": "",
         "Line4": viacep_data.get('bairro', ''),         # DE: bairro
         "Line5": "",
