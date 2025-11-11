@@ -11,7 +11,7 @@ app = Flask(__name__)
 @app.route('/Capture/Interactive/Find/v1.00/json3.ws', methods=['GET'])
 def find_address():
     # Pega o texto que o usuário digitou (ex: "Rua X... 90210000")
-    query_text = request.args.get('Text', '')
+    query_text = request.args.get('Text', '').strip()
     
     # Pega a última "palavra" do texto, assumindo que é o CEP
     words = query_text.split(' ')
