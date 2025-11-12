@@ -1,69 +1,112 @@
 import requests
 from flask import Flask, jsonify, request
+import re  # <--- NOVO IMPORT
 
 # 1. Inicializa o servidor Flask
 app = Flask(__name__)
 
 
+# --- FUNÇÃO HELPER (NOVA) ---
+# Esta função checa de forma rápida se um CEP existe na BrasilAPI
+# Usada pelo endpoint de "Busca"
+def check_cep_exists(cep):
+    """
+    Faz uma chamada rápida (timeout curto) à BrasilAPI para 
+    verificar se um CEP retorna status 200 (OK).
+    """
+    try:
+        url = f"https://brasilapi.com.br/api/cep/v1/{cep}"
+        # Timeout curto (2 segundos) pois é para sugestão "ao vivo"
+        response = requests.get(url, timeout=2) 
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Erro ao checar CEP {cep}: {e}")
+        return False # Falha seguro (assume que não existe se der erro)
+# --- FIM DA FUNÇÃO HELPER ---
+
+
 # 2. ENDPOINT DE "BUSCA" (Find)
 # ------------------------------------
-# (Esta função não precisa de alteração)
+# (Esta função foi TOTALMENTE ATUALIZADA)
 @app.route('/Capture/Interactive/Find/v1.00/json3.ws', methods=['GET'])
 def find_address():
     query_text = request.args.get('Text', '').strip()
-    words = query_text.split(' ')
-    cep = words[-1] if words else ''
-    cep = cep.replace('-', '')
     
-    if len(cep) >= 8:
-        suggestion_id = cep
-        suggestion_text = f"Usar endereço com CEP: {suggestion_id}"
+    # --- Lógica de Limpeza e Validação ---
+    
+    # 1. Pega a última "palavra" digitada.
+    words = query_text.split(' ')
+    cep_bruto = words[-1] if words else ''
+    
+    # 2. Limpa a "palavra", mantendo apenas dígitos (remove 'ABC', '-', '.')
+    cep_limpo = re.sub(r'\D', '', cep_bruto)
+    
+    # 3. Verifica se o resultado limpo tem EXATAMENTE 8 dígitos
+    if len(cep_limpo) == 8:
         
+        # 4. VALIDA A EXISTÊNCIA do CEP (chamada externa)
+        if check_cep_exists(cep_limpo):
+            # SUCESSO: O CEP tem 8 dígitos E existe.
+            suggestion_id = cep_limpo
+            suggestion_text = f"Usar endereço com CEP: {suggestion_id}"
+            suggestion_type = "Address" # Tipo padrão
+            suggestion_desc = f"Clique para buscar o CEP {suggestion_id}"
+        
+        else:
+            # ERRO: O CEP tem 8 dígitos mas NÃO FOI ENCONTRADO.
+            suggestion_id = f"not_found_{cep_limpo}"
+            suggestion_text = f"CEP {cep_limpo} não encontrado"
+            suggestion_type = "Warning" # Um tipo diferente (informativo)
+            suggestion_desc = "O CEP digitado não retornou resultados."
+            
+        # Monta a resposta que o Opera espera
         response_data = {
             "Items": [
                 {
                     "Id": suggestion_id,
-                    "Type": "Address",
+                    "Type": suggestion_type,
                     "Text": suggestion_text,
                     "Highlight": "",
-                    "Description": suggestion_text
+                    "Description": suggestion_desc
                 }
             ]
         }
         return jsonify(response_data)
     
+    # Se não tiver 8 dígitos limpos, não é um CEP válido.
+    # Retorna lista vazia (sem sugestões)
     return jsonify({"Items": []})
 
 
 # 3. ENDPOINT DE "CAPTURA" (Retrieve)
 # ------------------------------------
+# (Esta seção inteira NÃO MUDA. A lógica de failover abaixo está correta)
 
-# --- Provedor 1: BrasilAPI (AGORA É O PRIMÁRIO) ---
+# --- Provedor 1: BrasilAPI (PRIMÁRIO) ---
 def try_brasilapi(cep):
     """Tenta buscar e mapear o CEP usando o BrasilAPI."""
     try:
         print(f"Tentando provedor: BrasilAPI (Primário) para o CEP {cep}")
         brasil_api_url = f"https://brasilapi.com.br/api/cep/v1/{cep}"
         brasil_response = requests.get(brasil_api_url, timeout=3)
-        brasil_response.raise_for_status() # Verifica erros (ex: 404 se CEP não existe)
+        brasil_response.raise_for_status() 
         brasil_data = brasil_response.json()
         
-        # --- Mapeamento (DE/PARA) BrasilAPI -> Opera ---
         opera_item = {
             "Id": cep, "DomesticId": cep, "Language": "PT", "LanguageAlternatives": "PT",
             "Department": "", "Company": "", "SubBuilding": "", "BuildingNumber": "", 
             "BuildingName": "", "SecondaryStreet": "",
-            "Street": brasil_data.get('street', ''),          # DE: street
+            "Street": brasil_data.get('street', ''),
             "Block": "",
-            "Neighbourhood": brasil_data.get('neighborhood', ''), # DE: neighborhood
-            "District": brasil_data.get('neighborhood', ''),      # DE: neighborhood
-            "City": brasil_data.get('city', ''),              # DE: city
+            "Neighbourhood": brasil_data.get('neighborhood', ''),
+            "District": brasil_data.get('neighborhood', ''),
+            "City": brasil_data.get('city', ''),
             "Line1": brasil_data.get('street', ''),
             "Line2": "", "Line3": brasil_data.get('neighborhood', ''), "Line4": "", "Line5": "",
             "AdminAreaName": "", "AdminAreaCode": "",
-            "Province": brasil_data.get('state', ''),         # DE: state (UF)
+            "Province": brasil_data.get('state', ''),
             "ProvinceName": "", "ProvinceCode": "",
-            "PostalCode": brasil_data.get('cep', '').replace('-', ''), # DE: cep
+            "PostalCode": brasil_data.get('cep', '').replace('-', ''),
             "CountryName": "BR", "CountryIso2": "BR", "CountryIso3": "BR",
             "CountryIsoNumber": "", "SortingNumber1": "", "SortingNumber2": "",
             "Barcode": "", "POBoxNumber": "", "Label": "",
@@ -78,9 +121,9 @@ def try_brasilapi(cep):
 
     except Exception as e:
         print(f"Falha no BrasilAPI: {e}")
-        return None # Retorna None em caso de falha
+        return None
 
-# --- Provedor 2: ViaCEP (AGORA É O FALLBACK) ---
+# --- Provedor 2: ViaCEP (FALLBACK) ---
 def try_viacep(cep):
     """Tenta buscar e mapear o CEP usando o ViaCEP."""
     try:
@@ -94,7 +137,6 @@ def try_viacep(cep):
              print("ViaCEP retornou 'erro', CEP não encontrado.")
              return None 
 
-        # --- Mapeamento (DE/PARA) ViaCEP -> Opera ---
         opera_item = {
             "Id": cep, "DomesticId": cep, "Language": "PT", "LanguageAlternatives": "PT",
             "Department": "", "Company": "", "SubBuilding": "", "BuildingNumber": "", 
@@ -130,11 +172,14 @@ def try_viacep(cep):
 @app.route('/Capture/Interactive/Retrieve/v1.00/json3.ws', methods=['GET'])
 def retrieve_address():
     address_id_cep = request.args.get('Id', '')
-    if not address_id_cep:
+    
+    # Se o usuário clicar em "CEP não encontrado", o ID começará com "not_found_"
+    # e a busca de CEP falhará aqui, o que é o comportamento correto.
+    if not address_id_cep or address_id_cep.startswith("not_found_"):
+        print(f"Busca 'Retrieve' ignorada para ID inválido: {address_id_cep}")
         return jsonify({"Items": []})
 
-    # <--- LÓGICA DE FAILOVER ATUALIZADA --->
-    # Lista de funções (provedores) para tentar em ordem
+    # Lógica de Failover (INALTERADA)
     providers = [
         try_brasilapi,  # Tenta este primeiro
         try_viacep      # Se o BrasilAPI falhar, tenta este
@@ -144,14 +189,12 @@ def retrieve_address():
     for provider_func in providers:
         opera_item = provider_func(address_id_cep)
         if opera_item:
-            break # Se um provedor for bem-sucedido, para o loop
+            break 
 
-    # Se, após todas as tentativas, o opera_item ainda for None, retorna lista vazia
     if not opera_item:
         print(f"Todos os provedores falharam para o CEP {address_id_cep}")
         return jsonify({"Items": []})
     
-    # Monta a resposta final que o Opera espera
     response_data = {
         "Items": [opera_item]
     }
