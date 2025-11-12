@@ -8,10 +8,6 @@ import os       # <-- Para ler as Variáveis de Ambiente
 app = Flask(__name__)
 
 # --- Configuração do Banco de Dados SQL Server ---
-#
-# Lendo as configurações das Variáveis de Ambiente (MUITO IMPORTANTE)
-# Os valores que você passou são usados como "default" para facilitar seu teste.
-#
 db_config = {
     "server": os.environ.get("DB_SERVER", "10.21.233.220"),
     "database": os.environ.get("DB_DATABASE", "tecnologia"),
@@ -19,7 +15,7 @@ db_config = {
     "password": os.environ.get("DB_PASSWORD", "Tecno@2023"),
     "encrypt": True,
     "trustServerCertificate": True,
-    "table": "dbo.windsor_cep" # Nome da sua tabela
+    "table": "dbo.windsor_cep"
 }
 
 def clean_cep(cep):
@@ -29,7 +25,7 @@ def clean_cep(cep):
 def get_db_conn():
     """Cria e retorna uma nova conexão pyodbc."""
     connection_string = (
-        # O driver pode mudar dependendo da sua instalação (ex: 'SQL Server Native Client 11.0')
+       
         f"DRIVER={{ODBC Driver 17 for SQL Server}};" 
         f"SERVER={db_config['server']};"
         f"DATABASE={db_config['database']};"
@@ -47,9 +43,8 @@ def get_db_conn():
         print("Verifique se o 'ODBC Driver 17 for SQL Server' está instalado nesta máquina.")
         return None
 
-# 2. ENDPOINT DE "BUSCA" (Find)
+# 2. ENDPOINT DE "BUSCA"
 # ------------------------------------
-# (Esta função permanece igual, pois não acessa o banco)
 @app.route('/Capture/Interactive/Find/v1.00/json3.ws', methods=['GET'])
 def find_address():
     query_text = request.args.get('Text', '').strip()
@@ -78,7 +73,7 @@ def find_address():
     return jsonify({"Items": []})
 
 
-# 3. ENDPOINT DE "CAPTURA" (Retrieve) - (MODIFICADO COM SQL SERVER)
+# 3. ENDPOINT DE "CAPTURA"
 # ------------------------------------
 @app.route('/Capture/Interactive/Retrieve/v1.00/json3.ws', methods=['GET'])
 def retrieve_address():
